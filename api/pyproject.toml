@@ -6,8 +6,29 @@ authors = ["Aleksei Mikhalev <mikhalev.aleksei1@gmail.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.12"
+python = ">=3.11,<3.13"
 fastapi = {extras = ["standard"], version = "^0.115.8"}
+pymupdf = "^1.25.3"
+pymupdf4llm = "^0.0.17"
+scikit-learn = "^1.6.1"
+matplotlib = "^3.10.0"
+sentence-transformers = "^3.4.1"
+llama-index = "^0.12.17"
+llama-index-embeddings-huggingface = "^0.5.1"
+llama-index-llms-ollama = "^0.5.2"
+llmsherpa = "^0.1.4"
+setuptools = "^75.8.0"
+wheel = "^0.45.1"
+umap-learn = "^0.5.7"
+datamapplot = "^0.5.1"
+plotly = "^6.0.0"
+bertopic = "^0.16.4"
+nbformat = "^5.10.4"
+ollama = "^0.4.7"
+fuzzywuzzy = "^0.18.0"
+pytextrank = "^3.3.0"
+pydantic-settings = "^2.7.1"
+motor = "^3.7.0"
 
 
 [build-system]

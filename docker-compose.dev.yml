@@ -1,0 +1,85 @@
+services:
+  nlm-ingestor:
+    image: ghcr.io/nlmatics/nlm-ingestor:latest
+    container_name: nlm-ingestor
+    ports:
+      - "5001:5001"
+    restart: on-failure:0
+    networks:
+      - ai-library-network
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    privileged: true
+    ports:
+      - "11434:11434"
+    healthcheck:
+      test: ollama --version || exit 1
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [ gpu ]
+    volumes:
+      - ollama:/root/.ollama
+    restart: unless-stopped
+    networks:
+      - ai-library-network
+
+  mongo_db:
+    image: mongo
+    container_name: mongodb
+    restart: on-failure:0
+    ports:
+      - 27017:27017
+    env_file:
+      - .env
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - ai-library-network
+
+  neo4j:
+    image: neo4j:5.25.1-community
+    container_name: neo4j
+    ports:
+      - 7474:7474
+      - 7687:7687
+    volumes:
+      - neo4j_data:/data
+      - neo4j_import:/var/lib/neo4j/import/
+    networks:
+      - ai-library-network
+    restart: on-failure:0
+    environment:
+      - NEO4J_ACCEPT_LICENSE_AGREEMENT=yes
+      - NEO4J_AUTH=${NEO4J_USER}/${NEO4J_PASSWORD}
+      - NEO4J_apoc_export_file_enabled=true
+      - NEO4J_apoc_import_file_enabled=true
+      - NEO4J_apoc_import_file_use__neo4j=true
+      - NEO4J_dbms_security_allow__csv__import__from__file__urls=true
+      - NEO4J_PLUGINS=["apoc"]
+      - NEO4J_server_memory_pagecache_size=2G
+      - NEO4J_server_memory_heap_max__size=2G
+      - NEO4J_dbms_memory_transaction_total_max=6G
+      - NEO4J_dbms_security_auth__enabled=true
+      - NEO4J_dbms_routing_driver_logging_level=DEBUG
+      - NEO4J_db_logs_query_enabled=VERBOSE
+      - NEO4J_db_logs_query_parameter__logging__enabled=true
+      - NEO4J_db_logs_query_transaction_enabled=VERBOSE
+      - NEO4J_dbms_logs_http_enabled=true
+      - NEO4J_server_logs_debug_enabled=true
+      - NEO4J_server_threads_worker__count=8
+volumes:
+  ollama:
+  mongodb_data:
+  neo4j_data:
+  neo4j_import:
+    driver: local
+
+networks:
+  ai-library-network:
+    driver: bridge
