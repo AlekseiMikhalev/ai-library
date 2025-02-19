@@ -7,6 +7,15 @@ services:
     restart: on-failure:0
     networks:
       - ai-library-network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    
+
   ollama:
     image: ollama/ollama:latest
     container_name: ollama
@@ -15,17 +24,16 @@ services:
       - "11434:11434"
     healthcheck:
       test: ollama --version || exit 1
-    runtime: nvidia
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
               count: all
-              capabilities: [ gpu ]
+              capabilities: [gpu]
+    restart: on-failure:0
     volumes:
       - ollama:/root/.ollama
-    restart: unless-stopped
     networks:
       - ai-library-network
 

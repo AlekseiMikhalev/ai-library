@@ -1,7 +1,7 @@
 """Database initializer."""
 
 from neo4j import AsyncDriver, AsyncGraphDatabase, Driver, GraphDatabase
-from api.src.config.settings import app_settings
+from src.config.settings import app_settings
 
 
 # Dependency to provide the Neo4j async session

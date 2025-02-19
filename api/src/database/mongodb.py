@@ -1,5 +1,5 @@
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
-from api.src.config.settings import app_settings
+from src.config.settings import app_settings
 
 
 def get_mongodb() -> AsyncIOMotorDatabase:

@@ -1,5 +1,3 @@
-"""Search Recommendation Engine App."""
-
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -7,8 +5,8 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.src.routers.v1.upload import router as api_v1_router
-from api.src.config.settings import AppSettings
+from src.routers.v1.upload import router as api_v1_router
+from src.config.settings import AppSettings
 
 
 @lru_cache()
@@ -26,7 +24,7 @@ openapi_url = "/openapi.json" if app_settings.ENABLE_DOCS else None
 
 ai_library_app = FastAPI(
     **app_settings.model_dump(),
-    summary=Path("api/src/docs/app_overview.md").read_text(),
+    summary=Path("docs/app_overview.md").read_text(),
     docs_url=docs_url,
     redoc_url=redoc_url,
     openapi_url=openapi_url,

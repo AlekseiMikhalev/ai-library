@@ -1,0 +1,54 @@
+{
+  "200": {
+    "description": "Upload successful",
+    "content": {
+      "application/json": {
+        "example": {
+          "_id": "example_document_id",
+          "sections": [],
+          "status": "PROCESSING"
+        }
+      }
+    }
+  },
+  "422": {
+    "description": "Validation Error",
+    "content": {
+      "application/json": {
+        "example": {
+          "_id": null,
+          "sections": [],
+          "status": "FAILED"
+        }
+      }
+    }
+  },
+  "201": {
+    "description": "Document processed",
+    "content": {
+      "application/json": {
+        "example": {
+          "documentId": "example_document_id",
+          "sections": [
+            {
+              "section_name": "Section 1",
+              "section_text": "This is the text of Section 1",
+              "section_paragraphs_data": [
+                {
+                  "level": 1,
+                  "text": "This is the text of Paragraph 1",
+                  "page": 1,
+                  "parent_text": "",
+                  "parent_chain": []
+                }
+              ],
+              "section_text_embedding": [1.0, 2.0, 3.0],
+              "cluster": "Cluster 1"
+            }
+          ],
+          "status": "PROCESSED"
+        }
+      }
+    }
+  }
+}

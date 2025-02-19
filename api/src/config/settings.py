@@ -1,6 +1,6 @@
 from typing import Any
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings
 
 
 class AppSettings(BaseSettings):
@@ -34,7 +34,9 @@ class AppSettings(BaseSettings):
     # Logs
     DEBUG_MODE: bool = False
 
-    model_config = SettingsConfigDict(env_file=".env", extra="allow")
+    class Config:
+        env_file = "../../.env"
+        extra = "allow"
 
 
 app_settings = AppSettings()

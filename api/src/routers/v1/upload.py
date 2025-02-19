@@ -1,29 +1,23 @@
 import json
 from functools import lru_cache
 from pathlib import Path
-import uuid
+from bson import ObjectId
 
-from api.src.database.neo4j import get_neo4j_async, get_neo4j_sync
-from api.src.database.mongodb import get_mongodb
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, BackgroundTasks
-from api.src.repository.pdf_processing import PDFProcessingRepository
-from api.src.schemas.upload import ProcessedDocument
-from motor.motor_asyncio import AsyncIOMotorDatabase
-from neo4j import AsyncGraphDatabase, GraphDatabase
+from fastapi import APIRouter, File, HTTPException, UploadFile, BackgroundTasks
+from src.repository.pdf_processing import PDFProcessingRepository
+from src.schemas.upload import ProcessedDocument
 import logging
 
-from api.src.services.pdf_processing import PDFProcessorService
+from src.services.pdf_processing import PDFProcessorService
 
 router = APIRouter(prefix="/v1")
 
 # Documentation
-BASE_DOCS_PATH = Path("/api.src/docs")
-BASE_EXAMPLES_REQUESTS_PATH = Path("/api.src/docs/examples_requests")  # TODO
-BASE_EXAMPLES_RESPONSES_PATH = Path("/api.src/docs/examples_responses")  # TODO
+BASE_DOCS_PATH = Path("docs")
 
 # Directory to save neo4j files inside the Docker volume or locally
 UPLOAD_DIRECTORY_NEO4J = Path("/neo4j_import")
-UPLOAD_DIRECTORY_PDF = Path("/pdf_uploads")
+UPLOAD_DIRECTORY_PDF = Path("pdf_uploads")
 
 
 @lru_cache(maxsize=50)
@@ -31,34 +25,27 @@ UPLOAD_DIRECTORY_PDF = Path("/pdf_uploads")
     "/upload",
     tags=["features extraction"],
     response_model=ProcessedDocument,
-    description=(BASE_DOCS_PATH / "upload.md").read_text(),
+    description=(BASE_DOCS_PATH / "upload_router.md").read_text(),
     response_description="Return upload and feature extraction results",
-    responses=json.loads((BASE_EXAMPLES_RESPONSES_PATH / "upload.json").read_text()),
+    responses=json.loads((BASE_DOCS_PATH / "examples_responses.json").read_text()),
 )
 async def upload_pdf(
     background_tasks: BackgroundTasks,
-    file: UploadFile = File(...),
-    neo4j_driver_async: AsyncGraphDatabase = Depends(get_neo4j_async),
-    neo4j_driver_sync: GraphDatabase = Depends(get_neo4j_sync),
-    mongodb: AsyncIOMotorDatabase = Depends(get_mongodb),
+    file: UploadFile = File(
+        ..., example=json.loads((BASE_DOCS_PATH / "examples_requests.json").read_text())
+    ),
 ):
-    document_id = str(uuid.uuid4())
+    document_id = str(ObjectId())
 
     try:
-        file_location = UPLOAD_DIRECTORY_PDF / f"{document_id}.pdf"
+        file_location = str(UPLOAD_DIRECTORY_PDF / f"{document_id}.pdf")
         with open(file_location, "wb+") as file_object:
             file_object.write(await file.read())
 
-        pdf_processing_service = PDFProcessorService(
-            mongodb, neo4j_driver_async, neo4j_driver_sync
-        )
-
-        background_tasks.add_task(
-            pdf_processing_service.process_pdf, file_location, document_id
-        )
+        background_tasks.add_task(perform_processing, file_location, document_id)
 
         return ProcessedDocument(
-            documentId=document_id, sections=[], status="PROCESSING"
+            document_id=document_id, sections=[], status="PROCESSING"
         )
 
     except Exception as e:
@@ -66,17 +53,14 @@ async def upload_pdf(
         raise HTTPException(500, "PDF processing failed")
 
 
-@router.get("/status/{document_id}", response_model=ProcessedDocument)
-async def get_status(
-    document_id: str,
-    neo4j_driver_async: AsyncGraphDatabase = Depends(get_neo4j_async),
-    neo4j_driver_sync: GraphDatabase = Depends(get_neo4j_sync),
-    mongodb: AsyncIOMotorDatabase = Depends(get_mongodb),
-):
+@router.get(
+    "/status/{document_id}",
+    response_model=ProcessedDocument,
+    tags=["features extraction"],
+)
+async def get_status(document_id: str):
     try:
-        pdf_processing_repository = PDFProcessingRepository(
-            mongodb, neo4j_driver_async, neo4j_driver_sync
-        )
+        pdf_processing_repository = PDFProcessingRepository()
         processed_document_status = (
             await pdf_processing_repository.get_processing_status(document_id)
         )
@@ -84,3 +68,13 @@ async def get_status(
     except Exception as e:
         logging.error(f"Processing failed: {e}")
         raise HTTPException(500, "PDF processing failed")
+
+
+async def perform_processing(file_location: str, document_id: str):
+    pdf_processor_service = PDFProcessorService()
+    processed_document = await pdf_processor_service.process_pdf(
+        file_location, document_id
+    )
+    processed_document.status = "COMPLETED"
+    logging.info(f"Processing completed for document {document_id}")
+    return processed_document

@@ -1,0 +1,13 @@
+{
+  "requests": {
+    "POST /upload": {
+      "file": {
+        "filename": "example.pdf",
+        "content": "base64 encoded PDF content"
+      }
+    },
+    "GET /status/{document_id}": {
+      "document_id": "example_document_id"
+    }
+  }
+}

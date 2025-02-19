@@ -1,13 +1,13 @@
+import gc
 from llmsherpa.readers import LayoutPDFReader
-from motor.motor_asyncio import AsyncIOMotorDatabase
-from api.src.repository.pdf_processing import PDFProcessingRepository
-from neo4j import AsyncGraphDatabase, GraphDatabase
+import torch
+from src.repository.pdf_processing import PDFProcessingRepository
 from sklearn.cluster import AgglomerativeClustering
 import asyncio
 import logging
 import time
 from ollama import embed
-from api.src.schemas.upload import SectionData, ProcessedDocument
+from src.schemas.upload import SectionData, ProcessedDocument
 from dotenv import load_dotenv
 import os
 
@@ -22,16 +22,9 @@ logging.basicConfig(
 
 
 class PDFProcessorService:
-    def __init__(
-        self,
-        mongodb_client: AsyncIOMotorDatabase,
-        neo4j_async_driver: AsyncGraphDatabase,
-        neo4j_sync_driver: GraphDatabase,
-    ):
+    def __init__(self):
         self.pdf_reader = LayoutPDFReader(LLMSHERPA_API_URL)
-        self.processing_repository = PDFProcessingRepository(
-            mongodb_client, neo4j_async_driver, neo4j_sync_driver
-        )
+        self.processing_repository = PDFProcessingRepository()
 
     @staticmethod
     async def _get_embedding(section_data: SectionData) -> dict:
@@ -106,7 +99,7 @@ class PDFProcessorService:
             # Save processing status
             await self.processing_repository.save_pdf_processing_metadata(
                 ProcessedDocument(
-                    documentId=document_id, sections=[], status="PROCESSING"
+                    document_id=document_id, sections=[], status="PROCESSING"
                 )
             )
             start_time = time.time()
@@ -121,6 +114,12 @@ class PDFProcessorService:
                 sections_features
             )
 
+            # Clear GPU memory
+            logging.info("Clearing GPU memory")
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
             # Get clusters
             logging.info("Clustering sections")
             clustered_sections = self._get_clusters(sections_features_with_embeddings)
@@ -131,25 +130,31 @@ class PDFProcessorService:
                 f"Time spent on features extraction: {end_time - start_time:.2f} seconds"
             )
 
+            # Clear GPU memory
+            logging.info("Clearing GPU memory")
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
             # Update processing status
             updated_document = (
                 await self.processing_repository.update_pdf_processing_metadata(
                     ProcessedDocument(
-                        documentId=document_id,
+                        document_id=document_id,
                         sections=clustered_sections,
                         status="COMPLETED",
                     )
                 )
             )
 
-            return updated_document
+            return ProcessedDocument(**updated_document)
         except Exception as e:
             logging.error(f"Processing failed: {e}")
             updated_document = (
                 await self.processing_repository.update_pdf_processing_metadata(
                     ProcessedDocument(
-                        documentId=document_id, sections=[], status="FAILED"
+                        document_id=document_id, sections=[], status="FAILED"
                     )
                 )
             )
-            return updated_document
+            return ProcessedDocument(**updated_document)

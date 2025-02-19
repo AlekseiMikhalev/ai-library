@@ -22,6 +22,6 @@ class SectionsFeatures(BaseModel):
 
 
 class ProcessedDocument(BaseModel):
-    document_id: str = Field(..., alias="documentId")
+    document_id: str = Field(...)
     sections: list[SectionData]
     status: str
