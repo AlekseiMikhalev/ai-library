@@ -31,6 +31,11 @@ class AppSettings(BaseSettings):
     CORS_HEADERS: list[str]
     CORS_METHODS: list[str]
 
+    # Celery and Redis
+    CELERY_BROKER_URL: str
+    CELERY_RESULT_BACKEND: str
+    REDIS_HOST: str
+
     # Logs
     DEBUG_MODE: bool = False
 

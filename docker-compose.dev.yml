@@ -1,4 +1,32 @@
 services:
+  api:
+    build: ./api
+    container_name: api
+    image: api:latest
+    restart: on-failure:0
+    ports:
+      - "8000:8000"
+    develop:
+      watch:
+        # Sync the working directory with the `/app` directory in the container
+        - action: sync
+          path: .
+          target: /app
+          ignore:
+            - venv/
+
+        # Rebuild the image if dependencies change by checking uv.lock
+        - action: rebuild
+          path: ./uv.lock
+    depends_on:
+      - mongo_db
+      - neo4j
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+    networks:
+      - ai-library-network
   nlm-ingestor:
     image: ghcr.io/nlmatics/nlm-ingestor:latest
     container_name: nlm-ingestor
@@ -7,6 +35,8 @@ services:
     restart: on-failure:0
     networks:
       - ai-library-network
+    depends_on:
+      - ollama
     deploy:
       resources:
         reservations:
@@ -14,7 +44,6 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
-    
 
   ollama:
     image: ollama/ollama:latest
@@ -81,6 +110,39 @@ services:
       - NEO4J_dbms_logs_http_enabled=true
       - NEO4J_server_logs_debug_enabled=true
       - NEO4J_server_threads_worker__count=8
+
+  worker:
+    build: ./api
+    image: api:latest
+    container_name: celery_worker
+    command: ["celery", "-A", "src.worker.celery_app", "worker", "--loglevel=info"]
+    restart: on-failure:0
+    depends_on:
+      redis:
+        condition: service_healthy
+      mongo_db:
+        condition: service_healthy
+    environment:
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
+    volumes:
+      - .:/app
+    networks:
+      - ai-library-network
+
+  redis:
+    image: redis/redis-stack-server:latest
+    container_name: redis
+    restart: on-failure:0
+    ports:
+      - "6379:6379"
+    networks:
+      - ai-library-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 3
+
 volumes:
   ollama:
   mongodb_data:

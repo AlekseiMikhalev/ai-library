@@ -6,7 +6,7 @@ class SectionParagraphData(BaseModel):
     text: str
     page: int
     parent_text: str
-    parent_chain: set
+    parent_chain: list
 
 
 class SectionData(BaseModel):
@@ -24,4 +24,9 @@ class SectionsFeatures(BaseModel):
 class ProcessedDocument(BaseModel):
     document_id: str = Field(...)
     sections: list[SectionData]
+    status: str
+
+
+class ProcessedDocumentMongoDB(BaseModel):
+    document_id: str = Field(...)
     status: str

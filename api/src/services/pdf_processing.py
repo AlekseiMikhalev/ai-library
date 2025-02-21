@@ -7,7 +7,11 @@ import asyncio
 import logging
 import time
 from ollama import embed
-from src.schemas.upload import SectionData, ProcessedDocument
+from src.schemas.upload import (
+    ProcessedDocumentMongoDB,
+    SectionData,
+    ProcessedDocument,
+)
 from dotenv import load_dotenv
 import os
 
@@ -39,7 +43,7 @@ class PDFProcessorService:
         results = await asyncio.gather(*tasks)
         return results
 
-    def _read_pdf(self, pdf_url: str) -> list[SectionData]:
+    async def _read_pdf(self, pdf_url: str) -> list[SectionData]:
         doc = self.pdf_reader.read_pdf(pdf_url)
         sections_with_all_paragraphs = []
         for section in doc.sections():
@@ -53,12 +57,14 @@ class PDFProcessorService:
                     ),
                     "page": section_paragraph.page_idx + 1,
                     "parent_text": section_paragraph.parent_text(),
-                    "parent_chain": set(
-                        [
-                            item.to_text()
-                            for item in section_paragraph.parent_chain()
-                            if item.to_text() not in ["", None]
-                        ]
+                    "parent_chain": list(
+                        set(
+                            [
+                                item.to_text()
+                                for item in section_paragraph.parent_chain()
+                                if item.to_text() not in ["", None]
+                            ]
+                        )
                     ),
                 }
                 section_extracted_paragraphs_dataset.append(section_paragraphs_data)
@@ -73,7 +79,7 @@ class PDFProcessorService:
 
         return sections_with_all_paragraphs
 
-    def _get_clusters(self, sections_features_with_embeddings: list[SectionData]):
+    async def _get_clusters(self, sections_features_with_embeddings: list[SectionData]):
         embeddings_list = [
             section.section_text_embedding
             for section in sections_features_with_embeddings
@@ -98,15 +104,13 @@ class PDFProcessorService:
         try:
             # Save processing status
             await self.processing_repository.save_pdf_processing_metadata(
-                ProcessedDocument(
-                    document_id=document_id, sections=[], status="PROCESSING"
-                )
+                ProcessedDocumentMongoDB(document_id=document_id, status="PROCESSING")
             )
             start_time = time.time()
 
             # Read PDF
             logging.info(f"Reading PDF: {pdf_url}")
-            sections_features = self._read_pdf(pdf_url)
+            sections_features = await self._read_pdf(pdf_url)
 
             # Get embeddings
             logging.info(f"Getting embeddings for {len(sections_features)} sections")
@@ -122,7 +126,13 @@ class PDFProcessorService:
 
             # Get clusters
             logging.info("Clustering sections")
-            clustered_sections = self._get_clusters(sections_features_with_embeddings)
+            clustered_sections = await self._get_clusters(
+                sections_features_with_embeddings
+            )
+
+            # Store into Neo4j
+            logging.info("Storing extracted features into Neo4j")
+            # TODO: Implement Neo4j storage
 
             end_time = time.time()
 
@@ -139,22 +149,19 @@ class PDFProcessorService:
             # Update processing status
             updated_document = (
                 await self.processing_repository.update_pdf_processing_metadata(
-                    ProcessedDocument(
+                    ProcessedDocumentMongoDB(
                         document_id=document_id,
-                        sections=clustered_sections,
                         status="COMPLETED",
                     )
                 )
             )
 
-            return ProcessedDocument(**updated_document)
+            return ProcessedDocumentMongoDB(**updated_document)
         except Exception as e:
             logging.error(f"Processing failed: {e}")
             updated_document = (
                 await self.processing_repository.update_pdf_processing_metadata(
-                    ProcessedDocument(
-                        document_id=document_id, sections=[], status="FAILED"
-                    )
+                    ProcessedDocumentMongoDB(document_id=document_id, status="FAILED")
                 )
             )
-            return ProcessedDocument(**updated_document)
+            return ProcessedDocumentMongoDB(**updated_document)

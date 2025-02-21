@@ -3,7 +3,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from neo4j import AsyncGraphDatabase, GraphDatabase
 from src.database.mongodb import get_mongodb
 from src.database.neo4j import get_neo4j_async, get_neo4j_sync
-from src.schemas.upload import ProcessedDocument
+from src.schemas.upload import ProcessedDocument, ProcessedDocumentMongoDB
 from pymongo import ReturnDocument
 from bson import ObjectId
 

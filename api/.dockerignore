@@ -1,0 +1,14 @@
+.git
+.gitignore
+.gitmodules
+.pytest_cache
+.vscode
+__pycache__
+venv
+*.pyc
+*.log
+*.swp
+.env
+example.env
+docker-compose.dev.yml
+frontend/node_modules
