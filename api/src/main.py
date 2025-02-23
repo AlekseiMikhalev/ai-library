@@ -24,7 +24,7 @@ openapi_url = "/openapi.json" if app_settings.ENABLE_DOCS else None
 
 ai_library_app = FastAPI(
     **app_settings.model_dump(),
-    summary=Path("docs/app_overview.md").read_text(),
+    summary=Path("src/docs/app_overview.md").read_text(),
     docs_url=docs_url,
     redoc_url=redoc_url,
     openapi_url=openapi_url,

@@ -1,35 +1,27 @@
-FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS builder
-ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
-
-ENV UV_PYTHON_DOWNLOADS=0
-
-WORKDIR /app
-RUN --mount=type=cache,target=/root/.cache/uv \
-    --mount=type=bind,source=uv.lock,target=uv.lock \
-    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
-    uv sync --frozen --no-install-project --no-dev
-ADD . /app
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev
-
-# Then, use a final image without uv
 FROM python:3.12-slim-bookworm
 
-COPY --from=builder --chown=app:app /app /app
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-# Place executables in the environment at the front of the path
-ENV PATH="/app/.venv/bin:$PATH"
+# Create a non-root user and set up app directory
+RUN groupadd -r appgroup \
+    && useradd -r -g appgroup -G appgroup -m -d /home/appuser -s /sbin/nologin -c "App User" appuser
 
-# Create and switch to non-root user
-RUN groupadd -r appgroup && \
-    useradd -r -g appgroup -d /app -s /sbin/nologin -c "App User" appuser && \
-    chown -R appuser:appgroup /app
 
+# Set the working directory
+WORKDIR /app
+
+# Copy the project files into the image
+COPY . /app
+
+# Export dependencies to requirements.txt
+RUN uv export -o requirements.txt
+
+# Install dependencies directly into the system environment
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Switch to non-root user context
 USER appuser
 
-EXPOSE 8000
-HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-    CMD curl --fail http://localhost:8000/ || exit 1
-
-# Run the FastAPI application by default
-CMD ["fastapi", "dev", "--host", "0.0.0.0", "app/src"]
+# Run the FastAPI application
+CMD ["fastapi", "dev", "src/main.py", "--port", "8000", "--host", "0.0.0.0"]

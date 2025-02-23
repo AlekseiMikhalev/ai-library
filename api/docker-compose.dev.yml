@@ -1,23 +1,21 @@
 services:
   api:
-    build: ./api
+    build: .
     container_name: api
     image: api:latest
     restart: on-failure:0
     ports:
-      - "8000:8000"
+      - "8000:80"
     develop:
       watch:
-        # Sync the working directory with the `/app` directory in the container
         - action: sync
           path: .
           target: /app
           ignore:
-            - venv/
+            - .venv/
 
-        # Rebuild the image if dependencies change by checking uv.lock
         - action: rebuild
-          path: ./uv.lock
+          path: ./pyproject.toml
     depends_on:
       - mongo_db
       - neo4j
@@ -27,6 +25,40 @@ services:
       - .:/app
     networks:
       - ai-library-network
+
+  worker:
+    build: .
+    image: api:latest
+    container_name: celery_worker
+    command: ["celery", "-A", "src.worker.celery_app", "worker", "--loglevel=info"]
+    restart: on-failure:0
+    depends_on:
+      redis:
+        condition: service_healthy
+      mongo_db:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      - broker_connection_retry_on_startup=${BROKER_CONNECTION_RETRY_ON_STARTUP}
+    volumes:
+      - .:/app
+    networks:
+      - ai-library-network
+
+  redis:
+    image: redis/redis-stack-server:latest
+    container_name: redis
+    restart: on-failure:0
+    ports:
+      - "6379:6379"
+    networks:
+      - ai-library-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 3
+  
   nlm-ingestor:
     image: ghcr.io/nlmatics/nlm-ingestor:latest
     container_name: nlm-ingestor
@@ -69,6 +101,11 @@ services:
   mongo_db:
     image: mongo
     container_name: mongodb
+    command: >
+      --quiet
+      --logpath /dev/stdout
+      --logappend
+      --setParameter logComponentVerbosity={network:1}
     restart: on-failure:0
     ports:
       - 27017:27017
@@ -78,6 +115,11 @@ services:
       - mongodb_data:/data/db
     networks:
       - ai-library-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.runCommand({ping: 1})"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   neo4j:
     image: neo4j:5.25.1-community
@@ -110,38 +152,6 @@ services:
       - NEO4J_dbms_logs_http_enabled=true
       - NEO4J_server_logs_debug_enabled=true
       - NEO4J_server_threads_worker__count=8
-
-  worker:
-    build: ./api
-    image: api:latest
-    container_name: celery_worker
-    command: ["celery", "-A", "src.worker.celery_app", "worker", "--loglevel=info"]
-    restart: on-failure:0
-    depends_on:
-      redis:
-        condition: service_healthy
-      mongo_db:
-        condition: service_healthy
-    environment:
-      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
-      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
-    volumes:
-      - .:/app
-    networks:
-      - ai-library-network
-
-  redis:
-    image: redis/redis-stack-server:latest
-    container_name: redis
-    restart: on-failure:0
-    ports:
-      - "6379:6379"
-    networks:
-      - ai-library-network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      retries: 3
 
 volumes:
   ollama:

@@ -13,7 +13,7 @@ from src.services.pdf_processing import PDFProcessorService
 router = APIRouter(prefix="/v1")
 
 # Documentation
-BASE_DOCS_PATH = Path("docs")
+BASE_DOCS_PATH = Path("src/docs")
 
 # Directory to save neo4j files inside the Docker volume or locally
 UPLOAD_DIRECTORY_NEO4J = Path("/neo4j_import")
