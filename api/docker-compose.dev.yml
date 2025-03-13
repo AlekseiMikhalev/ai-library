@@ -5,7 +5,7 @@ services:
     image: api:latest
     restart: on-failure:0
     ports:
-      - "8000:80"
+      - "8000:8000"
     develop:
       watch:
         - action: sync
@@ -13,12 +13,13 @@ services:
           target: /app
           ignore:
             - .venv/
-
+            - venv/
         - action: rebuild
           path: ./pyproject.toml
     depends_on:
       - mongo_db
       - neo4j
+      - ollama
     env_file:
       - .env
     volumes:
@@ -82,7 +83,7 @@ services:
     container_name: ollama
     privileged: true
     ports:
-      - "11434:11434"
+      - "7689:11434"
     healthcheck:
       test: ollama --version || exit 1
     deploy:
@@ -95,6 +96,8 @@ services:
     restart: on-failure:0
     volumes:
       - ollama:/root/.ollama
+      - ./ollama_entrypoint.sh:/ollama_entrypoint.sh
+    entrypoint: ["/usr/bin/bash", "/ollama_entrypoint.sh"]
     networks:
       - ai-library-network
 
@@ -109,8 +112,8 @@ services:
     restart: on-failure:0
     ports:
       - 27017:27017
-    env_file:
-      - .env
+    environment:
+      - OLLAMA_HOST=${OLLAMA_HOST}
     volumes:
       - mongodb_data:/data/db
     networks:

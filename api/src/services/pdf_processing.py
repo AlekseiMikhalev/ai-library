@@ -14,6 +14,7 @@ from src.schemas.upload import (
 )
 from dotenv import load_dotenv
 import os
+from pathlib import Path
 
 load_dotenv()
 
@@ -155,6 +156,11 @@ class PDFProcessorService:
                     )
                 )
             )
+
+            # Remove temp PDF file after processing
+            file_path = Path(pdf_url)
+            if file_path.exists():
+                file_path.unlink()
 
             return ProcessedDocumentMongoDB(**updated_document)
         except Exception as e:

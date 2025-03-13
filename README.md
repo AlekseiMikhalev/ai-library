@@ -44,15 +44,35 @@ The project is in the early development phase and follows an iterative roadmap:
 
 The repository is structured as follows:  
 
-```
-📂 api/                # Backend FastAPI application  
-   ├── main.py         # API entry point  
-   ├── routers/        # API routes  
-   ├── services/       # Business logic and feature extraction  
-   ├── repository/     # Database interaction (MongoDB, Neo4j)  
-📂 frontend/           # Next.js frontend  
-📄 docker-compose.yml  # Development & testing environment  
-📄 example.env         # Example environment variables  
+```python
+ai-library/
+├── README.md             # Project documentation and overview
+├── api/                  # API-related code and configurations
+│   ├── .dockerignore     # Files to ignore in Docker builds
+│   ├── .env              # Environment variables for development
+│   ├── Dockerfile        # Instructions for building the Docker image
+│   ├── Makefile          # Commands for building and managing the project
+│   ├── docker-compose.dev.yml # Configuration for Docker Compose in development
+│   ├── example.env       # Example environment variables
+│   ├── pyproject.toml    # Project metadata and dependencies for Python
+│   ├── pytest.ini        # Configuration for pytest
+│   ├── src/              # Source code for the API
+│   │   ├── __init__.py   # Marks the directory as a Python package
+│   │   ├── config/       # Configuration files for the application
+│   │   ├── database/     # Database models and migrations
+│   │   ├── docs/         # Documentation files
+│   │   ├── main.py       # Main entry point for the API
+│   │   ├── models/       # Data models for the application
+│   │   ├── pdf_uploads/  # Directory for uploaded PDF files
+│   │   ├── repository/    # Data access layer for database interactions
+│   │   ├── routers/      # API route definitions
+│   │   ├── schemas/      # Data validation schemas
+│   │   ├── services/     # Business logic of the application
+│   │   ├── tasks.py      # Background tasks
+│   │   ├── utils/        # Utility functions and helpers
+│   │   ├── worker.py     # Worker for background processing
+│   ├── tests/            # Test cases for the API
+├── frontend/             # Frontend application code
 ```
 
 ## **Key Features**  

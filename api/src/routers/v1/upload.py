@@ -17,7 +17,7 @@ BASE_DOCS_PATH = Path("src/docs")
 
 # Directory to save neo4j files inside the Docker volume or locally
 UPLOAD_DIRECTORY_NEO4J = Path("/neo4j_import")
-UPLOAD_DIRECTORY_PDF = Path("pdf_uploads")
+UPLOAD_DIRECTORY_PDF = Path("src/pdf_uploads")
 
 
 @lru_cache(maxsize=50)
