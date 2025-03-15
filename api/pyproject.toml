@@ -36,6 +36,7 @@ dependencies = [
     "pytest<9.0.0,>=8.3.4",
     "celery[redis]<6.0.0,>=5.4.0",
     "redis[hiredis]<6.0.0,>=5.2.1",
+    "pypdf2>=3.0.1",
 ]
 name = "api"
 version = "0.1.0"

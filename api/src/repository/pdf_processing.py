@@ -3,7 +3,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from neo4j import AsyncGraphDatabase, GraphDatabase
 from src.database.mongodb import get_mongodb
 from src.database.neo4j import get_neo4j_async, get_neo4j_sync
-from src.schemas.upload import ProcessedDocument, ProcessedDocumentMongoDB
+from src.schemas.upload import ProcessedBook, ProcessedBookMongoDB
 from pymongo import ReturnDocument
 from bson import ObjectId
 
@@ -20,7 +20,7 @@ class PDFProcessingRepository:
         self.neo4j_sync_driver = neo4j_sync_driver
 
     async def save_pdf_processing_metadata(
-        self, document: ProcessedDocument
+        self, document: ProcessedBook
     ) -> dict[str, Any] | None:
         pdf_processing_collection = self.mongodb_client.get_collection("pdf_processing")
         document_dict = document.model_dump()
@@ -35,8 +35,8 @@ class PDFProcessingRepository:
         return None
 
     async def update_pdf_processing_metadata(
-        self, document: ProcessedDocument
-    ) -> ProcessedDocument | None:
+        self, document: ProcessedBook
+    ) -> ProcessedBook | None:
         pdf_processing_collection = self.mongodb_client.get_collection("pdf_processing")
         document_dict = document.model_dump()
         document_dict["_id"] = ObjectId(document.document_id)
@@ -47,6 +47,6 @@ class PDFProcessingRepository:
         )
         return updated_document
 
-    async def get_processing_status(self, document_id: str) -> ProcessedDocument:
+    async def get_processing_status(self, document_id: str) -> ProcessedBook:
         collection = self.mongodb_client.get_collection("pdf_processing")
         return await collection.find_one({"_id": ObjectId(document_id)})

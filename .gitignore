@@ -2,3 +2,5 @@ venv*
 prototyping*
 __pycache__
 .env*
+results_examples
+neo4j_import

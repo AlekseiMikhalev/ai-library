@@ -1,3 +1,4 @@
+from datetime import datetime
 from pydantic import BaseModel, Field
 
 
@@ -21,12 +22,20 @@ class SectionsFeatures(BaseModel):
     sections_features: list[SectionData]
 
 
-class ProcessedDocument(BaseModel):
+class ProcessedBook(BaseModel):
     document_id: str = Field(...)
+    title: str = "Untitled"
+    author: str = "Unknown"
+    pages: int = 0
+    published_date: datetime = None
+    added_date: datetime = datetime.now()
+    cover_image: str = ""
+    description: str = ""
+    concepts: list[str] = []
     sections: list[SectionData]
-    status: str
+    status: str = ""
 
 
-class ProcessedDocumentMongoDB(BaseModel):
+class ProcessedBookMongoDB(BaseModel):
     document_id: str = Field(...)
     status: str

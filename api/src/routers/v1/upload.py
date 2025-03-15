@@ -5,7 +5,7 @@ from bson import ObjectId
 
 from fastapi import APIRouter, File, HTTPException, UploadFile, BackgroundTasks
 from src.repository.pdf_processing import PDFProcessingRepository
-from src.schemas.upload import ProcessedDocument, ProcessedDocumentMongoDB
+from src.schemas.upload import ProcessedBook, ProcessedBookMongoDB
 import logging
 
 from src.services.pdf_processing import PDFProcessorService
@@ -24,7 +24,7 @@ UPLOAD_DIRECTORY_PDF = Path("src/pdf_uploads")
 @router.post(
     "/upload",
     tags=["features extraction"],
-    response_model=ProcessedDocumentMongoDB,
+    response_model=ProcessedBookMongoDB,
     description=(BASE_DOCS_PATH / "upload_router.md").read_text(),
     response_description="Return upload and feature extraction results",
     responses=json.loads((BASE_DOCS_PATH / "examples_responses.json").read_text()),
@@ -44,7 +44,7 @@ async def upload_pdf(
 
         background_tasks.add_task(perform_processing, file_location, document_id)
 
-        return ProcessedDocumentMongoDB(
+        return ProcessedBookMongoDB(
             document_id=document_id, sections=[], status="PROCESSING"
         )
 
@@ -55,7 +55,7 @@ async def upload_pdf(
 
 @router.get(
     "/status/{document_id}",
-    response_model=ProcessedDocumentMongoDB,
+    response_model=ProcessedBookMongoDB,
     tags=["features extraction"],
 )
 async def get_status(document_id: str):
@@ -64,7 +64,7 @@ async def get_status(document_id: str):
         processed_document_status = (
             await pdf_processing_repository.get_processing_status(document_id)
         )
-        return ProcessedDocumentMongoDB(**processed_document_status)
+        return ProcessedBookMongoDB(**processed_document_status)
     except Exception as e:
         logging.error(f"Processing failed: {e}")
         raise HTTPException(500, "PDF processing failed")
