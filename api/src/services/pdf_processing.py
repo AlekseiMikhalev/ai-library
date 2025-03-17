@@ -1,27 +1,33 @@
 import gc
 import json
+import re
 from llmsherpa.readers import LayoutPDFReader
+from motor.motor_asyncio import AsyncIOMotorDatabase
+from neo4j import Driver, AsyncDriver
+import tiktoken
 import torch
 from src.repository.pdf_processing import PDFProcessingRepository
-from sklearn.cluster import AgglomerativeClustering
 import asyncio
 import logging
 import time
-from ollama import embed
+from ollama import AsyncClient
 from src.schemas.upload import (
     ProcessedBookMongoDB,
     SectionData,
     ProcessedBook,
+    ExtractedConcepts,
 )
-from dotenv import load_dotenv
-import os
 from pathlib import Path
 from PyPDF2 import PdfReader
+from tqdm.asyncio import tqdm_asyncio
+import os
+from dotenv import load_dotenv
 
 load_dotenv()
 
-LLMSHERPA_API_URL = os.getenv("LLMSHERPA_API_URL")
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL")
+# LLM Models
+EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL")
+GENERATION_MODEL: str = os.getenv("GENERATION_MODEL")
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -29,16 +35,184 @@ logging.basicConfig(
 
 
 class PDFProcessorService:
-    def __init__(self):
-        self.pdf_reader = LayoutPDFReader(LLMSHERPA_API_URL)
-        self.processing_repository = PDFProcessingRepository()
+    def __init__(
+        self,
+        ollama_client: AsyncClient,
+        mongo_db: AsyncIOMotorDatabase,
+        neo4j_sync_driver: Driver,
+        neo4j_async_driver: AsyncDriver,
+        pdf_reader: LayoutPDFReader,
+    ):
+        self.ollama_client = ollama_client
+        self.mongo_db = mongo_db
+        self.neo4j_sync_driver = neo4j_sync_driver
+        self.neo4j_async_driver = neo4j_async_driver
+        self.pdf_reader = pdf_reader
+        self.processing_repository = PDFProcessingRepository(
+            neo4j_async_driver=neo4j_async_driver,
+            neo4j_sync_driver=neo4j_sync_driver,
+            mongodb_client=mongo_db,
+        )
 
-    @staticmethod
-    async def _get_embedding(section_data: SectionData) -> dict:
+        # Initialize memory management
+        self.device = self._setup_gpu_memory()
+
+        # Set chunk size based on model
+        self.max_chunk_size = 4000
+
+    def _setup_gpu_memory(self):
+        """Configure GPU memory for optimal performance"""
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            return torch.device("cuda")
+        return torch.device("cpu")
+
+    def _manage_gpu_memory(self, force=False):
+        """Smart GPU memory management"""
+        if not torch.cuda.is_available():
+            return
+
+        # Only clean if memory usage is high or force is True
+        if force or (
+            torch.cuda.memory_allocated() / torch.cuda.max_memory_allocated() > 0.7
+        ):
+            gc.collect()
+            torch.cuda.empty_cache()
+
+    async def _get_embedding(self, section_data: SectionData) -> SectionData:
         section_data = section_data.model_copy()
-        embedding = embed(model=EMBEDDING_MODEL, input=section_data.section_text)
+        if not section_data.concepts:
+            return section_data
+        concepts_string = ", ".join(section_data.concepts)
+        embedding = await self.ollama_client.embed(
+            model=EMBEDDING_MODEL, input=concepts_string
+        )
+
         if embedding is not None:
-            section_data.section_text_embedding = embedding.embeddings[0]
+            section_data.section_concepts_embedding = embedding.embeddings[0]
+        return section_data
+
+    def _split_text_by_size(self, text: str, max_tokens: int) -> list[str]:
+        encoding = tiktoken.get_encoding("o200k_base")
+        if not text.strip():
+            return []
+
+        # Split text into sentences (this regex splits on punctuation followed by whitespace)
+        sentences = re.split(r"(?<=[.!?])\s+", text)
+        chunks = []
+        current_chunk = ""
+        current_chunk_tokens = 0
+
+        for sentence in sentences:
+            sentence_tokens = len(encoding.encode(sentence))
+            # If the sentence alone exceeds max_tokens, split it further by words.
+            if sentence_tokens > max_tokens:
+                words = sentence.split()
+                sub_chunk = ""
+                sub_chunk_tokens = 0
+                for word in words:
+                    word_tokens = len(encoding.encode(word))
+                    # Add a space if sub_chunk is not empty.
+                    space_tokens = len(encoding.encode(" ")) if sub_chunk else 0
+                    if sub_chunk_tokens + space_tokens + word_tokens <= max_tokens:
+                        sub_chunk += (" " if sub_chunk else "") + word
+                        sub_chunk_tokens += space_tokens + word_tokens
+                    else:
+                        # Try to add the finished sub_chunk to the current chunk if it fits.
+                        if current_chunk:
+                            space_tokens_chunk = len(encoding.encode(" "))
+                            if (
+                                current_chunk_tokens
+                                + space_tokens_chunk
+                                + sub_chunk_tokens
+                                <= max_tokens
+                            ):
+                                current_chunk += " " + sub_chunk
+                                current_chunk_tokens += (
+                                    space_tokens_chunk + sub_chunk_tokens
+                                )
+                            else:
+                                chunks.append(current_chunk)
+                                current_chunk = sub_chunk
+                                current_chunk_tokens = sub_chunk_tokens
+                        else:
+                            chunks.append(sub_chunk)
+                        sub_chunk = word
+                        sub_chunk_tokens = word_tokens
+                # Append any remaining sub_chunk.
+                if sub_chunk:
+                    if current_chunk:
+                        space_tokens_chunk = len(encoding.encode(" "))
+                        if (
+                            current_chunk_tokens + space_tokens_chunk + sub_chunk_tokens
+                            <= max_tokens
+                        ):
+                            current_chunk += " " + sub_chunk
+                            current_chunk_tokens += (
+                                space_tokens_chunk + sub_chunk_tokens
+                            )
+                        else:
+                            chunks.append(current_chunk)
+                            current_chunk = sub_chunk
+                            current_chunk_tokens = sub_chunk_tokens
+                    else:
+                        current_chunk = sub_chunk
+                        current_chunk_tokens = sub_chunk_tokens
+            else:
+                # If sentence fits as a whole, add a space if needed.
+                space_tokens = len(encoding.encode(" ")) if current_chunk else 0
+                if current_chunk_tokens + space_tokens + sentence_tokens <= max_tokens:
+                    current_chunk += (" " if current_chunk else "") + sentence
+                    current_chunk_tokens += space_tokens + sentence_tokens
+                else:
+                    # Flush the current chunk and start a new one with the sentence.
+                    if current_chunk:
+                        chunks.append(current_chunk)
+                    current_chunk = sentence
+                    current_chunk_tokens = sentence_tokens
+
+        if current_chunk:
+            chunks.append(current_chunk)
+
+        return chunks
+
+    async def _extract_concepts_from_section(
+        self, section_data: SectionData
+    ) -> SectionData:
+        section_data = section_data.model_copy()
+        text = section_data.section_text
+
+        if not text:
+            return section_data
+
+        chunks = self._split_text_by_size(text, self.max_chunk_size)
+
+        PROMPT = "Extract main ideas described in the text below. The output should be a JSON `{'concepts': ['idea1', 'idea2']}`."
+
+        # Function to process a single chunk
+        async def process_chunk(chunk: str) -> list[str]:
+            try:
+                response = await self.ollama_client.chat(
+                    model=GENERATION_MODEL,
+                    messages=[{"role": "user", "content": f"{PROMPT}\n\n{chunk}"}],
+                    format=ExtractedConcepts.model_json_schema(),
+                    options={"num_ctx": 8000},
+                )
+                extracted_result = ExtractedConcepts.model_validate_json(
+                    response.message.content
+                )
+                return extracted_result.concepts
+            except Exception as e:
+                logging.error(f"Error parsing concepts from chunk: {e}")
+                return []
+
+        # Run all chunk processing tasks concurrently
+        results = await asyncio.gather(*(process_chunk(chunk) for chunk in chunks))
+        if not results:
+            return section_data
+
+        flattened_results = [item for sublist in results for item in sublist]
+        section_data.concepts = list(set(flattened_results))
         return section_data
 
     async def _get_embeddings(self, sections: list[SectionData]) -> list[SectionData]:
@@ -105,26 +279,26 @@ class PDFProcessorService:
 
         return processed_document
 
-    async def _get_clusters(self, sections_features_with_embeddings: list[SectionData]):
-        embeddings_list = [
-            section.section_text_embedding
-            for section in sections_features_with_embeddings
+    async def _extract_concepts(
+        self, sections_features: list[SectionData]
+    ) -> list[SectionData]:
+        tasks = [
+            self._extract_concepts_from_section(section)
+            for section in sections_features
         ]
-        clustering = AgglomerativeClustering(
-            n_clusters=None,
-            linkage="complete",
-            metric="cosine",
-            distance_threshold=0.7,
+
+        # Progress of extracting concepts
+        results = await tqdm_asyncio.gather(
+            *tasks,
+            desc="Extracting concepts",
+            unit="sections",
+            total=len(tasks),
+            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} sections",
+            colour="cyan",
         )
-        cluster_labels = clustering.fit_predict(embeddings_list)
-
-        sections_features_with_clusters = []
-        for i, label in enumerate(cluster_labels):
-            section_data = sections_features_with_embeddings[i].model_copy()
-            section_data.cluster = f"cluster_{label}"
-            sections_features_with_clusters.append(section_data)
-
-        return sections_features_with_clusters
+        if not results:
+            return sections_features
+        return results
 
     async def process_pdf(self, pdf_url: str, document_id: str) -> ProcessedBook:
         try:
@@ -135,46 +309,34 @@ class PDFProcessorService:
             start_time = time.time()
 
             # Read PDF
-            logging.info(f"Reading PDF: {pdf_url}")
+            logging.info(f"Step 1/3: Reading and parsing PDF: {pdf_url}")
             processed_document = await self._read_pdf(pdf_url, document_id)
             sections_features = processed_document.sections
 
+            # Clear GPU memory before LLM processing
+            self._manage_gpu_memory(force=True)
+
+            # Extract concepts
+            logging.info("Step 2/3: Extracting concepts")
+            sections_with_concepts = await self._extract_concepts(sections_features)
+            processed_document.sections = sections_with_concepts
+            flatten_concepts_per_book = [
+                item for sublist in sections_with_concepts for item in sublist.concepts
+            ]
+            processed_document.concepts = list(set(flatten_concepts_per_book))
+
+            logging.info("Concepts extracted")
+
             # Get embeddings
-            logging.info(f"Getting embeddings for {len(sections_features)} sections")
-            sections_features_with_embeddings = await self._get_embeddings(
-                sections_features
+            logging.info("Step 3/3: Getting embeddings for sections concepts")
+            sections_with_concepts_with_embeddings = await self._get_embeddings(
+                processed_document.sections
             )
-
-            # Clear GPU memory
-            logging.info("Clearing GPU memory")
-            gc.collect()
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-
-            # Get clusters
-            logging.info("Clustering sections")
-            clustered_sections = await self._get_clusters(
-                sections_features_with_embeddings
-            )
-
-            processed_document.sections = clustered_sections
-
-            # TODO: Remove after debugging
-            with open("processed_document.json", "w") as json_file:
-                clustered_sections_json = [
-                    section.model_dump() for section in clustered_sections
-                ]
-                document_json = processed_document.model_dump()
-                document_json["sections"] = clustered_sections_json
-                json.dump(
-                    document_json,
-                    json_file,
-                    indent=4,
-                )
+            processed_document.sections = sections_with_concepts_with_embeddings
 
             # Store into Neo4j
-            logging.info("Storing extracted features into Neo4j")
-            # TODO: Implement Neo4j storage
+            logging.info("Step 4/4: Storing extracted features into Neo4j")
+            await self.processing_repository.store_features_in_neo4j(processed_document)
 
             end_time = time.time()
 
@@ -183,10 +345,7 @@ class PDFProcessorService:
             )
 
             # Clear GPU memory
-            logging.info("Clearing GPU memory")
-            gc.collect()
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
+            self._manage_gpu_memory(force=True)
 
             # Update processing status
             updated_document = (
@@ -203,7 +362,7 @@ class PDFProcessorService:
             if file_path.exists():
                 file_path.unlink()
 
-        #     return ProcessedBookMongoDB(**updated_document)
+            return ProcessedBookMongoDB(**updated_document)
         except Exception as e:
             logging.error(f"Processing failed: {e}")
             updated_document = (

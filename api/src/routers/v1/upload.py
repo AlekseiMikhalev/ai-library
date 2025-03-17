@@ -1,14 +1,30 @@
 import json
+
+from llmsherpa.readers import LayoutPDFReader
+from motor.motor_asyncio import AsyncIOMotorDatabase
+from neo4j import AsyncDriver, Driver
+from ollama import AsyncClient
+from src.schemas.upload import ProcessedBook, ProcessedBookMongoDB
 from functools import lru_cache
 from pathlib import Path
 from bson import ObjectId
 
-from fastapi import APIRouter, File, HTTPException, UploadFile, BackgroundTasks
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    UploadFile,
+    BackgroundTasks,
+)
 from src.repository.pdf_processing import PDFProcessingRepository
-from src.schemas.upload import ProcessedBook, ProcessedBookMongoDB
 import logging
 
 from src.services.pdf_processing import PDFProcessorService
+from src.utils.ollama_client import get_ollama_client
+from src.utils.pdf_reader import get_pdf_reader
+from src.database.mongodb import get_mongodb
+from src.database.neo4j import get_neo4j_sync, get_neo4j_async
 
 router = APIRouter(prefix="/v1")
 
@@ -34,6 +50,11 @@ async def upload_pdf(
     file: UploadFile = File(
         ..., example=json.loads((BASE_DOCS_PATH / "examples_requests.json").read_text())
     ),
+    ollama_client: AsyncClient = Depends(get_ollama_client),
+    mongo_db: AsyncIOMotorDatabase = Depends(get_mongodb),
+    neo4j_sync_driver: Driver = Depends(get_neo4j_sync),
+    neo4j_async_driver: AsyncDriver = Depends(get_neo4j_async),
+    pdf_reader: LayoutPDFReader = Depends(get_pdf_reader),
 ):
     document_id = str(ObjectId())
 
@@ -42,7 +63,16 @@ async def upload_pdf(
         with open(file_location, "wb+") as file_object:
             file_object.write(await file.read())
 
-        background_tasks.add_task(perform_processing, file_location, document_id)
+        background_tasks.add_task(
+            perform_processing,
+            file_location,
+            document_id,
+            ollama_client,
+            mongo_db,
+            neo4j_sync_driver,
+            neo4j_async_driver,
+            pdf_reader,
+        )
 
         return ProcessedBookMongoDB(
             document_id=document_id, sections=[], status="PROCESSING"
@@ -58,9 +88,18 @@ async def upload_pdf(
     response_model=ProcessedBookMongoDB,
     tags=["features extraction"],
 )
-async def get_status(document_id: str):
+async def get_status(
+    document_id: str,
+    neo4j_async_driver: AsyncDriver = Depends(get_neo4j_async),
+    neo4j_sync_driver: Driver = Depends(get_neo4j_sync),
+    mongo_db: AsyncIOMotorDatabase = Depends(get_mongodb),
+):
     try:
-        pdf_processing_repository = PDFProcessingRepository()
+        pdf_processing_repository = PDFProcessingRepository(
+            neo4j_async_driver=neo4j_async_driver,
+            neo4j_sync_driver=neo4j_sync_driver,
+            mongodb_client=mongo_db,
+        )
         processed_document_status = (
             await pdf_processing_repository.get_processing_status(document_id)
         )
@@ -70,8 +109,22 @@ async def get_status(document_id: str):
         raise HTTPException(500, "PDF processing failed")
 
 
-async def perform_processing(file_location: str, document_id: str):
-    pdf_processor_service = PDFProcessorService()
+async def perform_processing(
+    file_location: str,
+    document_id: str,
+    ollama_client: AsyncClient,
+    mongo_db: AsyncIOMotorDatabase,
+    neo4j_sync_driver: Driver,
+    neo4j_async_driver: AsyncDriver,
+    pdf_reader: LayoutPDFReader,
+):
+    pdf_processor_service = PDFProcessorService(
+        ollama_client=ollama_client,
+        mongo_db=mongo_db,
+        neo4j_sync_driver=neo4j_sync_driver,
+        neo4j_async_driver=neo4j_async_driver,
+        pdf_reader=pdf_reader,
+    )
     processed_document = await pdf_processor_service.process_pdf(
         file_location, document_id
     )

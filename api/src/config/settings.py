@@ -26,6 +26,10 @@ class AppSettings(BaseSettings):
     # LLMSherpa
     LLMSHERPA_API_URL: str
 
+    # Ollama models
+    EMBEDDING_MODEL: str
+    GENERATION_MODEL: str
+
     # CORS
     CORS_ORIGINS: list[str]
     CORS_HEADERS: list[str]

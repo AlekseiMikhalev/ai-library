@@ -15,5 +15,6 @@ RUN uv export -o requirements.txt
 # Install dependencies directly into the system environment
 RUN pip install --no-cache-dir -r requirements.txt
 
+
 # Run the FastAPI application
 CMD ["fastapi", "dev", "src/main.py", "--host", "0.0.0.0", "--port", "8000"]

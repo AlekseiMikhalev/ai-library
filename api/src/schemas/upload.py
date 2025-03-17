@@ -14,8 +14,8 @@ class SectionData(BaseModel):
     section_name: str
     section_paragraphs_data: list[SectionParagraphData]
     section_text: str
-    section_text_embedding: list[float] = None
-    cluster: str = None
+    section_concepts_embedding: list[float] = None
+    concepts: list[str] = []
 
 
 class SectionsFeatures(BaseModel):
@@ -39,3 +39,7 @@ class ProcessedBook(BaseModel):
 class ProcessedBookMongoDB(BaseModel):
     document_id: str = Field(...)
     status: str
+
+
+class ExtractedConcepts(BaseModel):
+    concepts: list[str]

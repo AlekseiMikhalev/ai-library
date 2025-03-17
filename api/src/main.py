@@ -1,12 +1,11 @@
 from functools import lru_cache
-from pathlib import Path
-from typing import Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
 from src.routers.v1.upload import router as api_v1_router
 from src.config.settings import AppSettings
+from pathlib import Path
+from typing import Any
 
 
 @lru_cache()
@@ -20,7 +19,6 @@ app_settings = get_settings()
 docs_url = "/docs" if app_settings.ENABLE_DOCS else None
 redoc_url = "/redoc" if app_settings.ENABLE_DOCS else None
 openapi_url = "/openapi.json" if app_settings.ENABLE_DOCS else None
-
 
 ai_library_app = FastAPI(
     **app_settings.model_dump(),

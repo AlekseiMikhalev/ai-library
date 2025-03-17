@@ -17,8 +17,9 @@ services:
         - action: rebuild
           path: ./pyproject.toml
     depends_on:
-      - mongo_db
       - neo4j
+      - nlm-ingestor
+      - mongo_db
       - ollama
     env_file:
       - .env
