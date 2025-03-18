@@ -2,7 +2,7 @@
 
 ## **Project Overview**  
 
-The Non-Fiction AI Library is an advanced tool designed for extracting and organizing knowledge from PDF documents. It enables users to upload PDFs, extract structured features, cluster related sections, and use a **Graph RAG** to learn knowledge concepts. The project leverages **Python**, **FastAPI**, and several key technologies, including **LLMSherpa, MongoDB (pymongo, motor), Neo4j, Ollama, and scikit-learn**.  
+The Non-Fiction AI Library is an advanced tool designed for extracting and organizing knowledge from PDF documents. It enables users to upload PDFs, extract structured features, and use a **Graph RAG** to learn knowledge concepts. The project leverages **Python**, **FastAPI**, and several key technologies, including **LLMSherpa, MongoDB (pymongo, motor), Neo4j, Ollama, and scikit-learn**.  
 
 Users can interact with the system to:  
 - Extract structured knowledge from PDFs.  
@@ -15,7 +15,7 @@ Users can interact with the system to:
 - **Backend:** FastAPI, LLMSherpa, MongoDB (Motor), Neo4j, Ollama, scikit-learn  
 - **Frontend:** Next.js  
 - **Database:** MongoDB (for document storage), Neo4j (for knowledge graph)  
-- **AI & ML:** LLMSherpa for text extraction, scikit-learn for clustering  
+- **AI & ML:** LLMSherpa for text extraction, Ollama for embeddings and generation 
 - **Containerization:** Docker, Docker Compose  
 - **Authentication & Security:** To be implemented  
 
@@ -25,8 +25,7 @@ The project is in the early development phase and follows an iterative roadmap:
 
 ### **Phase 1: Core Feature Development**  
 ✅ Backend module for **PDF upload and feature extraction**  
-✅ Backend module for **clustering extracted text sections**  
-🔲 Backend module for **building the knowledge graph (Neo4j)**  
+✅ Backend module for **building the knowledge graph (Neo4j)**  
 🔲 Backend module for **querying the knowledge graph using Cypher**  
 
 ### **Phase 2: User Interface & Interaction**  
