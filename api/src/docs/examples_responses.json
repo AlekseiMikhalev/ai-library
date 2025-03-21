@@ -42,7 +42,7 @@
                   "parent_chain": []
                 }
               ],
-              "section_text_embedding": [1.0, 2.0, 3.0],
+              "concepts_embeddings": [[1.0, 2.0, 3.0]],
               "cluster": "Cluster 1"
             }
           ],

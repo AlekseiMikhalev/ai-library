@@ -12,10 +12,12 @@ import logging
 import time
 from ollama import AsyncClient
 from src.schemas.upload import (
+    Concepts,
     ProcessedBookMongoDB,
     SectionData,
     ProcessedBook,
     ExtractedConcepts,
+    SectionParagraphData,
 )
 from pathlib import Path
 from PyPDF2 import PdfReader
@@ -83,20 +85,26 @@ class PDFProcessorService:
         section_data = section_data.model_copy()
         if not section_data.concepts:
             return section_data
-        concepts_string = ", ".join(section_data.concepts)
-        embedding = await self.ollama_client.embed(
-            model=EMBEDDING_MODEL, input=concepts_string
-        )
-
-        if embedding is not None:
-            section_data.section_concepts_embedding = embedding.embeddings[0]
+        section_concepts = section_data.concepts
+        tasks = [
+            self._get_embedding_for_concept(concept.name)
+            for concept in section_concepts
+        ]
+        results = await asyncio.gather(*tasks)
+        section_data.concepts = [
+            Concepts(name=concept.name, embedding=embedding)
+            for concept, embedding in zip(section_concepts, results)
+        ]
         return section_data
+
+    async def _get_embedding_for_concept(self, concept: str) -> list[float]:
+        results = await self.ollama_client.embed(model=EMBEDDING_MODEL, input=concept)
+        return results.embeddings[0]
 
     def _split_text_by_size(self, text: str, max_tokens: int) -> list[str]:
         encoding = tiktoken.get_encoding("o200k_base")
         if not text.strip():
             return []
-
         # Split text into sentences (this regex splits on punctuation followed by whitespace)
         sentences = re.split(r"(?<=[.!?])\s+", text)
         chunks = []
@@ -212,7 +220,9 @@ class PDFProcessorService:
             return section_data
 
         flattened_results = [item for sublist in results for item in sublist]
-        section_data.concepts = list(set(flattened_results))
+        section_data.concepts = [
+            Concepts(name=concept) for concept in list(set(flattened_results))
+        ]
         return section_data
 
     async def _get_embeddings(self, sections: list[SectionData]) -> list[SectionData]:
@@ -318,17 +328,22 @@ class PDFProcessorService:
 
             # Extract concepts
             logging.info("Step 2/3: Extracting concepts")
-            sections_with_concepts = await self._extract_concepts(sections_features)
+            sections_with_concepts = await self._extract_concepts(
+                sections_features[200:202]
+            )
             processed_document.sections = sections_with_concepts
+            # Flatten concepts per book
             flatten_concepts_per_book = [
-                item for sublist in sections_with_concepts for item in sublist.concepts
+                concept.name
+                for sublist in sections_with_concepts
+                for concept in sublist.concepts
             ]
             processed_document.concepts = list(set(flatten_concepts_per_book))
 
             logging.info("Concepts extracted")
 
-            # Get embeddings
-            logging.info("Step 3/3: Getting embeddings for sections concepts")
+            # Get embeddings for sections' concepts
+            logging.info("Step 3/3: Getting embeddings for sections' concepts")
             sections_with_concepts_with_embeddings = await self._get_embeddings(
                 processed_document.sections
             )

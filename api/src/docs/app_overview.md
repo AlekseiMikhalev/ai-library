@@ -43,7 +43,15 @@ Performs clustering on a list of sections with embeddings.
 * `section_name`: string
 * `section_text`: string
 * `section_paragraphs_data`: list of `ParagraphData` objects
-* `embedding`: list of floats (optional)
+* `concepts_embeddings`: list of lists of floats
+
+### ParagraphData
+
+* `level`: integer
+* `text`: string
+* `page`: integer
+* `parent_text`: string
+* `parent_chain`: list of strings
 
 ### Cluster
 

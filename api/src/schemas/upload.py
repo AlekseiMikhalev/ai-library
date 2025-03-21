@@ -10,12 +10,16 @@ class SectionParagraphData(BaseModel):
     parent_chain: list
 
 
+class Concepts(BaseModel):
+    name: str
+    embedding: list[float] = []
+
+
 class SectionData(BaseModel):
     section_name: str
     section_paragraphs_data: list[SectionParagraphData]
     section_text: str
-    section_concepts_embedding: list[float] = None
-    concepts: list[str] = []
+    concepts: list[Concepts] = []
 
 
 class SectionsFeatures(BaseModel):

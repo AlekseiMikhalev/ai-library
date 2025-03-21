@@ -2,7 +2,8 @@ from functools import lru_cache
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from src.routers.v1.upload import router as api_v1_router
+from src.routers.v1.upload import router as api_v1_upload_router
+from src.routers.v1.retrieval import router as api_v1_retrieval_router
 from src.config.settings import AppSettings
 from pathlib import Path
 from typing import Any
@@ -44,4 +45,5 @@ def healthcheck() -> dict[str, Any]:
     return app_settings.app_info
 
 
-ai_library_app.include_router(api_v1_router)
+ai_library_app.include_router(api_v1_upload_router)
+ai_library_app.include_router(api_v1_retrieval_router)

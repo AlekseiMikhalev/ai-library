@@ -85,11 +85,11 @@ class PDFProcessingRepository:
             """
         )
 
-        # Vector index for Section nodes on the "section_concepts_embedding" property
+        # Vector index for Concept nodes on the "embedding" property
         await tx.run(
             """
-            CREATE VECTOR INDEX sectionEmbeddingIndex IF NOT EXISTS
-            FOR (s:Section) ON (s.section_concepts_embedding)
+            CREATE VECTOR INDEX conceptEmbeddingIndex IF NOT EXISTS
+            FOR (c:Concept) ON (c.embedding)
             OPTIONS {
                 indexConfig: {
                     `vector.dimensions`: 768,
@@ -129,19 +129,19 @@ class PDFProcessingRepository:
             "UNWIND $sections AS section RETURN section",
             "
             MERGE (s:Section {name: section.section_name})
-            SET s.section_text = section.section_text,
-                s.section_concepts_embedding = section.section_concepts_embedding
+            SET s.section_text = section.section_text
             MERGE (book)-[:HAS_SECTION]->(s)
 
             WITH s, section
             UNWIND section.section_paragraphs_data AS paragraph
-            CREATE (p:Paragraph)
-            SET p = paragraph
+            MERGE (p:Paragraph {text: paragraph.text})
+            ON CREATE SET p += paragraph, p.name = paragraph.text[..20]
             MERGE (s)-[:HAS_PARAGRAPH]->(p)
 
             WITH s, section
             UNWIND section.concepts AS section_concept
-            MERGE (sc:Concept {name: section_concept})
+            MERGE (sc:Concept {name: section_concept.name})
+            SET sc.embedding = section_concept.embedding
             MERGE (s)-[:HAS_CONCEPT]->(sc)
             ",
             {batchSize: 100, iterateList: true, params: {sections: $sections}, logProgress: true, logBatchProgress: true}
